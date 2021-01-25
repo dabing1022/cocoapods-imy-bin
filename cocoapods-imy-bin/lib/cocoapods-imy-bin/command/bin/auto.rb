@@ -1,6 +1,7 @@
 
 require 'cocoapods-imy-bin/command/bin/auto'
 require 'cocoapods-imy-bin/helpers/upload_helper'
+require 'cocoapods-imy-bin/helpers/wxmsg'
 
 module Pod
   class Command
@@ -56,12 +57,15 @@ module Pod
 
           source_specs = run_archive
 
+          report = "#{@specification.name} 二进制构建结果\n"
+
           fail_push_specs = []
           source_specs.uniq.each do |spec|
             begin
               fail_push_specs << spec unless CBin::Upload::Helper.new(spec,@code_dependencies,@sources).upload
             rescue  Object => exception
               UI.puts exception
+              report << exception << "\n"
               fail_push_specs << spec
             end
           end
@@ -69,6 +73,7 @@ module Pod
           if fail_push_specs.any?
             fail_push_specs.uniq.each do |spec|
               UI.warn "【#{spec.name} | #{spec.version}】组件spec push失败 ."
+              report << "【#{spec.name} | #{spec.version}】组件spec push失败 ." << "\n"
             end
           end
 
@@ -78,10 +83,14 @@ module Pod
             success_specs.uniq.each do |spec|
               auto_success += "#{spec.name} | #{spec.version}\n"
               UI.warn "===【 #{spec.name} | #{spec.version} 】二进制组件制作完成 ！！！ "
+              report << "===【 #{spec.name} | #{spec.version} 】二进制组件制作完成 ！！！ " << "\n"
             end
             puts "==============  auto_success"
             puts auto_success
             ENV['auto_success'] = auto_success
+
+            report << "==============  auto_success" << "\n"
+            CBin::WXMsg.send_wechat_group_msg report
           end
           #pod repo update
           UI.section("\nUpdating Spec Repositories\n".yellow) do
