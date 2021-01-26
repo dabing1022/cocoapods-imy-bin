@@ -49,7 +49,7 @@ module CBin
           copy_headers
           copy_license
           copy_resources
-
+          copy_swiftmodules
           cp_to_source_dir
         end
         framework
@@ -328,6 +328,55 @@ module CBin
           end
           UI.message "Copying resources #{escape_resource}"
           `cp -rp #{escape_resource.join(' ')} #{framework.resources_path}`
+        end
+      end
+
+      def copy_swiftmodules
+        swiftmodules = []
+        module_name = @spec.name
+        (ios_architectures + ios_architectures_sim).map do |arch|
+          arch_swiftmodule = File.join(Dir.pwd, "build-#{arch}/#{@spec.name}.swiftmodule")
+          unless File.exist?(arch_swiftmodule)
+            module_name = @spec.name.gsub("-", "_")
+            arch_swiftmodule = File.join(Dir.pwd, "build-#{arch}/#{module_name}.swiftmodule")
+          end
+          swiftmodules << "#{arch_swiftmodule}/*" if File.exist?(arch_swiftmodule)
+        end
+        dst_dir = File.join(Dir.pwd, framework.swift_module_path)
+        FileUtils.rm_rf(dst_dir) if File.exist?(dst_dir)
+        if swiftmodules.count > 0
+          #拷贝swiftmodules文件夹下所有文件
+          FileUtils.mkdir_p(dst_dir) unless File.exist?(dst_dir)
+          `cp -rp #{swiftmodules.join(' ')} #{dst_dir}`
+          #删除Project文件夹
+          sourceinfo = File.join(dst_dir, "Project")
+          FileUtils.rm_rf(sourceinfo) if File.exist?(sourceinfo)
+          #重写module.modulemap
+          module_map = <<-MAP
+          framework module #{module_name} {
+            umbrella header "#{@spec.name}-umbrella.h"
+          
+            export *
+            module * { export * }
+          }
+
+          module #{@spec.name}.Swift {
+            header "#{@spec.name}-Swift.h"
+            requires objc
+          }
+          MAP
+          unless framework.module_map_path.exist?
+            framework.module_map_path.mkpath
+          end
+          File.write("#{framework.module_map_path}/module.modulemap", module_map)
+          #拷贝"#{@spec.name}-Swift.h"
+          (ios_architectures + ios_architectures_sim).map do |arch|
+            swiftheader = File.join(Dir.pwd, "build-#{arch}/Swift Compatibility Header/#{module_name}-Swift.h")
+            if File.exist?(swiftheader)
+              `cp -rp #{Shellwords.escape(swiftheader)} #{File.join(Dir.pwd, framework.headers_path)}`
+              break
+            end
+          end
         end
       end
 
