@@ -205,7 +205,7 @@ module CBin
       end
 
       def binary_public_header_files
-        "bin_#{code_spec.name}_#{code_spec.version}/Headers/*.h"
+        "bin_#{code_spec.name}_#{code_spec.version}/Headers/*.{h,hpp}"
       end
 
       def binary_vendored_libraries
