@@ -14,7 +14,7 @@ module Pod
     # Perform analysis for a given spec (or subspec)
     #
     def perform_extensive_analysis(spec)
-      return true
+      true
     end
 
     #覆盖

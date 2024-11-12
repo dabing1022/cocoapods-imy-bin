@@ -5,9 +5,6 @@ module Pod
       # configuration is valid for installation.
       #
       class TargetValidator
-
-
-
         def verify_swift_pods_have_module_dependencies
           error_messages = []
           pod_targets.each do |pod_target|
@@ -28,7 +25,8 @@ module Pod
                               'you may set `use_modular_headers!` globally in your Podfile, '\
                               'or specify `:modular_headers => true` for particular dependencies.'
           end
-          return false
+
+          false
 
           # raise Informative, 'The following Swift pods cannot yet be integrated '\
                              # "as static libraries:\n\n#{error_messages.join("\n\n")}"
