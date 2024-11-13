@@ -2,12 +2,12 @@
 
 module Pod
   class Podfile
-    USE_BINARIES = 'use_binaries'
-    USE_SOURCE_PODS = 'use_source_pods'
-    USE_BINARIES_SELECTOR = 'use_binaries_selector'
-    ALLOW_PRERELEASE = 'allow_prerelease'
-    USE_PLUGINS = 'use_plugins'
-    CONFIGURATION_ENV = 'configuration_env'
+    USE_BINARIES = 'use_binaries'.freeze
+    USE_SOURCE_PODS = 'use_source_pods'.freeze
+    USE_BINARIES_SELECTOR = 'use_binaries_selector'.freeze
+    ALLOW_PRERELEASE = 'allow_prerelease'.freeze
+    USE_PLUGINS = 'use_plugins'.freeze
+    CONFIGURATION_ENV = 'configuration_env'.freeze
 
     module ENVExecutor
       def execute_with_bin_plugin(&block)

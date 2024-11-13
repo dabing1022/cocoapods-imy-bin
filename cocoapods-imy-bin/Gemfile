@@ -4,11 +4,12 @@ SKIP_UNRELEASED_VERSIONS = false
 
 def cp_gem(name, repo_name, branch = 'master', path: false)
   return gem name if SKIP_UNRELEASED_VERSIONS
+
   opts = if path
-           { :path => "../#{repo_name}" }
+           { path: "../#{repo_name}" }
          else
            url = "https://github.com/CocoaPods/#{repo_name}.git"
-           { :git => url, :branch => branch }
+           { git: url, branch: branch }
          end
   gem name, opts
 end
@@ -17,13 +18,13 @@ source 'https://rubygems.org'
 
 group :development do
 
-  cp_gem 'cocoapods', 'cocoapods', path: 'CocoaPods'
-  cp_gem 'xcodeproj', 'xcodeproj', path: 'Xcodeproj'
-  cp_gem 'cocoapods-imy-bin', 'cocoapods-imy-bin', path: 'cocoapods-imy-bin'
+  # cp_gem 'cocoapods', 'cocoapods', path: 'CocoaPods'
+  # cp_gem 'xcodeproj', 'xcodeproj', path: 'Xcodeproj'
+  cp_gem 'cocoapods-imy-bin', 'cocoapods-imy-bin', path: true
 
+  gem 'bacon'
   gem 'cocoapods-generate', '2.2.5'
   gem 'mocha'
-  gem 'bacon'
   gem 'mocha-on-bacon'
   gem 'prettybacon'
 

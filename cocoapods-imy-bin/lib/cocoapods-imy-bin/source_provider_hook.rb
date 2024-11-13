@@ -13,9 +13,9 @@ Pod::HooksManager.register('cocoapods-imy-bin', :pre_install) do |_context, _|
     dependencies = _context.podfile.dependencies
     dependencies.each do |d|
       next unless d.respond_to?(:external_source) &&
-                  d.external_source.is_a?(Hash) &&
-                  !d.external_source[:path].nil? &&
-                  $ARGV[1] != 'archive'
+        d.external_source.is_a?(Hash) &&
+        !d.external_source[:path].nil? &&
+        $ARGV[1] != 'archive'
       _context.podfile.set_use_source_pods d.name
     end
   end
@@ -48,7 +48,7 @@ Pod::HooksManager.register('cocoapods-imy-bin', :source_provider) do |context, _
     if podfile.use_binaries? || podfile.use_binaries_selector
       added_sources << sources_manager.binary_source
       added_sources.reverse!
-   end
+    end
     added_sources.each { |source| context.add_source(source) }
   end
 end

@@ -14,33 +14,28 @@ module CBin
     end
 
     def binary_template_spec_files
-      @binary_spec_template_files ||= Pathname.glob('*.binary-template.podspec{,.json}')
+      @binary_template_spec_files ||= Pathname.glob('*.binary-template.podspec{,.json}')
     end
 
     def binary_template_spec_file
-      @binary_spec_template_file ||= binary_template_spec_files.first
+      @binary_template_spec_file ||= binary_template_spec_files.first
     end
 
     def code_spec_files
       @code_spec_files ||= spec_files - binary_spec_files - binary_template_spec_files
     end
-
     def code_spec
-      if code_spec_files.first
-        Pod::Specification.from_file(code_spec_files.first)
-     end
+      Pod::Specification.from_file(code_spec_files.first) if code_spec_files.first&.exist?
     end
 
     def binary_spec
-      if binary_spec_files.first
-        Pod::Specification.from_file(binary_spec_files.first)
-     end
+      Pod::Specification.from_file(binary_spec_files.first) if binary_spec_files.first&.exist?
     end
 
     def binary_template_spec
       if binary_template_spec_file
         Pod::Specification.from_file(binary_template_spec_file)
-     end
+      end
     end
 
     def find_spec_file(podspec)
@@ -59,10 +54,10 @@ module CBin
 
       unless code_spec
         raise Pod::Informative, '没有二进制 podspec 的情况下，必须要提供源码 podspec.'
-     end
+      end
       if code_spec.subspecs.any? && template_spec.nil?
         raise Pod::Informative, '拥有 subspec 的组件，在生成二进制 podspec 时，必须要提供模版 podspec.'
-     end
+      end
 
       @spec_creator = CBin::Specification::Creator.new(code_spec, template_spec)
       @spec_creator.create

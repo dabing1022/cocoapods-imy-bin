@@ -6,9 +6,7 @@ require 'cocoapods-imy-bin/config/config'
 module CBin
   class Specification
     class Creator
-      attr_reader :code_spec
-      attr_reader :template_spec
-      attr_reader :spec
+      attr_reader :code_spec, :template_spec, :spec
 
       def initialize(code_spec, template_spec, platforms = 'ios')
         @code_spec = code_spec
@@ -64,13 +62,13 @@ module CBin
         @spec.vendored_frameworks = "#{code_spec.root.name}.framework"
 
         # Resources
-        extnames = []
-        extnames << '*.bundle' if code_spec_consumer.resource_bundles.any?
+        resources = []
+        resources << '*.bundle' if code_spec_consumer.resource_bundles.any?
         if code_spec_consumer.resources.any?
-          extnames += code_spec_consumer.resources.map { |r| File.basename(r) }
+          resources += code_spec_consumer.resources.map { |r| File.basename(r) }
         end
-        if extnames.any?
-          @spec.resources = framework_contents('Resources').flat_map { |r| extnames.map { |e| "#{r}/#{e}" } }
+        if resources.any?
+          @spec.resources = framework_contents('Resources').flat_map { |r| resources.map { |e| "#{r}/#{e}" } }
         end
 
         # Source Location
@@ -135,11 +133,7 @@ module CBin
       end
 
       def framework_contents(name)
-        ["#{code_spec.root.name}.framework", "#{code_spec.root.name}.framework/Versions/A"].map { |path| "#{path}/#{name}" }
-      end
-
-      def binary_source_files
-        { http: format(CBin.config.binary_download_url, code_spec.root.name, code_spec.version), type: CBin.config.download_file_type }
+        %W[#{code_spec.root.name}.framework #{code_spec.root.name}.framework/Versions/A].map { |path| "#{path}/#{name}" }
       end
 
       def binary_source_files

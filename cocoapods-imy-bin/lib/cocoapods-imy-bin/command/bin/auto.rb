@@ -10,18 +10,18 @@ module Pod
         self.summary = '打开 workspace 工程.'
 
         self.arguments = [
-            CLAide::Argument.new('NAME.podspec', false)
+          CLAide::Argument.new('NAME.podspec', false)
         ]
         def self.options
           [
-              ['--code-dependencies', '使用源码依赖'],
-              ['--allow-prerelease', '允许使用 prerelease 的版本'],
-              ['--no-clean', '保留构建中间产物'],
-              ['--framework-output', '输出framework文件'],
-              ['--no-zip', '不压缩静态 framework 为 zip'],
-              ['--all-make', '对该组件的依赖库，全部制作为二进制组件'],
-              ['--configuration', 'Build the specified configuration (e.g. Release ). Defaults to Debug'],
-              ['--env', "该组件上传的环境 %w[dev debug_iphoneos release_iphoneos]"]
+            %w[--code-dependencies 使用源码依赖],
+            %w[--allow-prerelease 允许使用prerelease的版本],
+            %w[--no-clean 保留构建中间产物],
+            %w[--framework-output 输出framework文件],
+            %w[--no-zip 不压缩静态framework为zip],
+            %w[--all-make 对该组件的依赖库，全部制作为二进制组件],
+            ['--configuration', 'Build the specified configuration (e.g. Release ). Defaults to Debug'],
+            ['--env', '该组件上传的环境 %w[dev debug_iphoneos release_iphoneos]']
           ].concat(Pod::Command::Gen.options).concat(super).uniq
         end
 
@@ -39,7 +39,7 @@ module Pod
           @clean = argv.flag?('clean', true)
           @zip = argv.flag?('zip', true)
           @all_make = argv.flag?('all-make', false )
-          @verbose = argv.flag?('verbose',true)
+          @verbose = argv.flag?('verbose', true)
 
           @config = argv.option('configuration', 'Debug')
           @additional_args = argv.remainder!
@@ -48,7 +48,7 @@ module Pod
         end
 
         def validate!
-          help! "未找到 podspec文件" unless @podspec
+          help! '未找到 podspec文件' unless @podspec
           super
         end
 
@@ -62,7 +62,7 @@ module Pod
           fail_push_specs = []
           source_specs.uniq.each do |spec|
             begin
-              fail_push_specs << spec unless CBin::Upload::Helper.new(spec,@code_dependencies,@sources).upload
+              fail_push_specs << spec unless CBin::Upload::Helper.new(spec, @code_dependencies, @sources).upload
             rescue  Object => exception
               UI.puts exception
               report << exception << "\n"
@@ -79,17 +79,17 @@ module Pod
 
           success_specs = source_specs - fail_push_specs
           if success_specs.any?
-            auto_success = ""
+            auto_success = ''
             success_specs.uniq.each do |spec|
               auto_success += "#{spec.name} | #{spec.version}\n"
               UI.warn "===【 #{spec.name} | #{spec.version} 】二进制组件制作完成 ！！！ "
               report << "===【 #{spec.name} | #{spec.version} 】二进制组件制作完成 ！！！ " << "\n"
             end
-            puts "==============  auto_success"
+            puts '==============  auto_success'
             puts auto_success
             ENV['auto_success'] = auto_success
 
-            report << "==============  auto_success" << "\n"
+            report << '==============  auto_success' << "\n"
             CBin::WXMsg.send_wechat_group_msg report
           end
           #pod repo update
@@ -103,34 +103,20 @@ module Pod
 
         def run_archive
           argvs = [
-              "--sources=#{sources_option(@code_dependencies, @sources)},https:\/\/cdn.cocoapods.org",
-              @additional_args
+            "--sources=#{sources_option(@code_dependencies, @sources)},https:\/\/cdn.cocoapods.org",
+            @additional_args
           ]
 
           argvs << spec_file if spec_file
           argvs.delete(Array.new)
 
-          unless @clean
-            argvs += ['--no-clean']
-          end
-          if @code_dependencies
-            argvs += ['--code-dependencies']
-          end
-          if @verbose
-            argvs += ['--verbose']
-          end
-          if @allow_prerelease
-            argvs += ['--allow-prerelease']
-          end
-          if @framework_output
-            argvs += ['--framework-output']
-          end
-          if @all_make
-            argvs += ['--all-make']
-          end
-          if @env
-            argvs += ["--env=#{@env}"]
-          end
+          argvs += ['--no-clean'] unless @clean
+          argvs += ['--code-dependencies'] if @code_dependencies
+          argvs += ['--verbose'] if @verbose
+          argvs += ['--allow-prerelease'] if @allow_prerelease
+          argvs += ['--framework-output'] if @framework_output
+          argvs += ['--all-make'] if @all_make
+          argvs += ["--env=#{@env}"] if @env
           argvs += ["--configuration=#{@config}"]
           
           archive = Pod::Command::Bin::Archive.new(CLAide::ARGV.new(argvs))
@@ -167,9 +153,7 @@ module Pod
                            if @podspec
                              find_spec_file(@podspec) || @podspec
                            else
-                             if code_spec_files.empty?
-                               raise Informative, '当前目录下没有找到可用源码 podspec.'
-                             end
+                             raise Informative, '当前目录下没有找到可用源码 podspec.' if code_spec_files.empty?
 
                              spec_file = if @binary
                                            code_spec = Pod::Specification.from_file(code_spec_files.first)
@@ -190,16 +174,13 @@ module Pod
           name = nil
           Pathname.pwd.children.each do |child|
             puts child
-            if File.file?(child)
-              if child.extname == '.podspec'
-                  name = File.basename(child)
-                  unless name.include?("binary-template")
-                    return name
-                  end
-              end
-            end
+            next unless File.file?(child)
+            next unless child.extname == '.podspec'
+
+            name = File.basename(child)
+            return name unless name.include?('binary-template')
           end
-          return name
+          name
         end
 
       end

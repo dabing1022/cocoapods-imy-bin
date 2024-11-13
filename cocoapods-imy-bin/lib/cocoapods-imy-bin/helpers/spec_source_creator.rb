@@ -6,8 +6,7 @@ require 'cocoapods-imy-bin/config/config'
 module CBin
   class SpecificationSource
     class Creator
-      attr_reader :code_spec
-      attr_reader :spec
+      attr_reader :code_spec, :spec
 
       def initialize(code_spec, platforms = 'ios')
         @code_spec = code_spec
@@ -20,14 +19,11 @@ module CBin
       end
 
       def create
-        # spec = nil
         if CBin::Build::Utils.is_framework(@code_spec)
-          spec = create_framework_from_code_spec
+          create_framework_from_code_spec
         else
-          spec = create_from_code_spec
+          create_from_code_spec
         end
-
-        spec
       end
 
       def write_spec_file(file = filename)
@@ -112,16 +108,16 @@ module CBin
 
         @spec = Pod::Specification.from_hash(spec_hash)
 
-        #把命令 prepare_command 移除掉，如ReactiveCocoa会执行修改重命令的脚步
-        @spec.prepare_command = "" if @spec.prepare_command
+        # 把命令 prepare_command 移除掉，如ReactiveCocoa会执行修改重命令的脚步
+        @spec.prepare_command = '' if @spec.prepare_command
         @spec.version = code_spec.version
         @spec.source = binary_source
         @spec.source_files = binary_source_files
         @spec.public_header_files = binary_public_header_files
         @spec.vendored_libraries = binary_vendored_libraries
-        @spec.resources = binary_resources if @spec.attributes_hash.keys.include?("resources")
+        @spec.resources = binary_resources if @spec.attributes_hash.keys.include?('resources')
         @spec.description = <<-EOF
-         「   converted automatically by plugin cocoapods-imy-bin @厦门美柚 - slj    」
+         「   converted automatically by plugin cocoapods-imy-bin   」
           #{@spec.description}
         EOF
         @spec
@@ -219,10 +215,10 @@ module CBin
     end
   end
 end
-#模板框架begin
+# 模板框架begin
 #     s.source_files = "bin_#{s.name}_#{s.version}/Headers/*"
 #     s.public_header_files = "bin_#{s.name}_#{s.version}/Headers/*.h"
 #     s.vendored_libraries = "bin_#{s.name}_#{s.version}/*.a"
-#有图片资源的，要带上
-#s.resources = 'bin_#{s.name}_#{s.version}/Resources/*.{json,png,jpg,gif,js,xib,eot,svg,ttf,woff,db,sqlite,mp3,bundle}'
-#模板框架end
+# 有图片资源的，要带上
+# s.resources = 'bin_#{s.name}_#{s.version}/Resources/*.{json,png,jpg,gif,js,xib,eot,svg,ttf,woff,db,sqlite,mp3,bundle}'
+# 模板框架end

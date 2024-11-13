@@ -13,7 +13,7 @@ module Pod
 
           def self.options
             [
-              ['--all', '更新所有私有源，默认只更新二进制相关私有源']
+              %w[--all 更新所有私有源，默认只更新二进制相关私有源]
             ].concat(super)
           end
 
@@ -29,13 +29,11 @@ module Pod
               config.sources_manager.update(@name, show_output)
             else
               Parallel.each(valid_sources, in_threads: 4) do |source|
-                UI.puts "更新私有源仓库 #{source.to_s}".yellow
+                UI.puts "更新私有源仓库 #{source}".yellow
                 source.update(show_output)
               end
             end
           end
-
-
         end
       end
     end

@@ -9,21 +9,19 @@ module CBin
   class Framework
     class Builder
       include Pod
-      #Debug下还待完成
-      def initialize(spec, file_accessor, platform, source_dir, isRootSpec = true, build_model="Debug")
+      # Debug下还待完成
+      def initialize(spec, file_accessor, platform, source_dir, is_root_spec = true, build_mode='Debug')
         @spec = spec
         @source_dir = source_dir
         @file_accessor = file_accessor
         @platform = platform
-        @build_model = build_model
-        @isRootSpec = isRootSpec
-        #vendored_static_frameworks 只有 xx.framework  需要拼接为 xx.framework/xx by slj
+        @build_mode = build_mode
+        @is_root_spec = is_root_spec
+        # vendored_static_frameworks 只有 xx.framework  需要拼接为 xx.framework/xx by slj
         vendored_static_frameworks = file_accessor.vendored_static_frameworks.map do |framework|
           path = framework
-          extn = File.extname  path
-          if extn.downcase == '.framework'
-            path = File.join(path,File.basename(path, extn))
-          end
+          extname = File.extname path
+          path = File.join(path, File.basename(path, extname)) if extname.downcase == '.framework'
           path
         end
 
@@ -37,7 +35,7 @@ module CBin
         defines
       end
 
-      def lipo_build(defines)
+      def lipo_build(_defines)
         UI.section("Building static Library #{@spec}") do
           # defines = compile
 
@@ -59,7 +57,7 @@ module CBin
 
       def cp_to_source_dir
         framework_name = "#{@spec.name}.framework"
-        target_dir = File.join(CBin::Config::Builder.instance.zip_dir,framework_name)
+        target_dir = File.join(CBin::Config::Builder.instance.zip_dir.to_s, framework_name)
         FileUtils.rm_rf(target_dir) if File.exist?(target_dir)
 
         zip_dir = CBin::Config::Builder.instance.zip_dir
@@ -68,14 +66,12 @@ module CBin
         `cp -fa #{@platform}/#{framework_name} #{target_dir}`
       end
 
-      #模拟器，目前只支持 debug x86-64
+      # 模拟器，目前只支持 debug x86-64
       def build_sim_libraries(defines)
         UI.message 'Building simulator libraries'
 
-        # archs = %w[i386 x86_64]
-        archs = ios_architectures_sim
-        archs.map do |arch|
-          xcodebuild(defines, "-sdk iphonesimulator ARCHS=\'#{arch}\' ", "build-#{arch}",@build_model)
+        ios_architectures_sim.map do |arch|
+          xcodebuild(defines, "-sdk iphonesimulator ARCHS=\'#{arch}\' ", "build-#{arch}", @build_mode)
         end
 
       end
@@ -83,9 +79,7 @@ module CBin
 
       def static_libs_in_sandbox(build_dir = 'build')
         file = Dir.glob("#{build_dir}/lib#{target_name}.a")
-        unless file
-          UI.warn "file no find = #{build_dir}/lib#{target_name}.a"
-        end
+        UI.warn "file no find = #{build_dir}/lib#{target_name}.a" unless file
         file
       end
 
@@ -101,11 +95,11 @@ module CBin
         end
         # end
 
-        build_path = Pathname("build")
+        build_path = Pathname('build')
         build_path.mkpath unless build_path.exist?
 
         # if is_debug_model
-        libs = (ios_architectures + ios_architectures_sim) .map do |arch|
+        libs = (ios_architectures + ios_architectures_sim).map do |arch|
           library = "build-#{arch}/lib#{@spec.name}.a"
           library
         end
@@ -129,31 +123,11 @@ module CBin
       end
 
       def ios_architectures
-        # >armv7
-        #   iPhone4
-        #   iPhone4S
-        # >armv7s   去掉
-        #   iPhone5
-        #   iPhone5C
-        # >arm64
-        #   iPhone5S(以上)
-        # >i386
-        #   iphone5,iphone5s以下的模拟器
-        # >x86_64
-        #   iphone6以上的模拟器
-        archs = %w[arm64 armv7]
-        # archs = %w[x86_64 arm64 armv7s i386]
-        # @vendored_libraries.each do |library|
-        #   archs = `lipo -info #{library}`.split & archs
-        # end
-        archs
+        %w[arm64]
       end
 
       def ios_architectures_sim
-
-        archs = %w[x86_64]
-        # TODO 处理是否需要 i386
-        archs
+        %w[x86_64]
       end
 
       def compile
@@ -161,26 +135,19 @@ module CBin
         defines += ' '
         defines += @spec.consumer(@platform).compiler_flags.join(' ')
 
-        options = ios_build_options
-        # if is_debug_model
-        archs = ios_architectures
-        # archs = %w[arm64 armv7 armv7s]
-        archs.map do |arch|
-          xcodebuild(defines, "ARCHS=\'#{arch}\' OTHER_CFLAGS=\'-fembed-bitcode -Qunused-arguments\'","build-#{arch}",@build_model)
+        ios_architectures.map do |arch|
+          xcodebuild(defines, "ARCHS=\'#{arch}\' OTHER_CFLAGS=\'-fembed-bitcode -Qunused-arguments\'", "build-#{arch}", @build_mode)
         end
-        # else
-        # xcodebuild(defines,options)
-        # end
 
         defines
       end
 
       def is_debug_model
-        @build_model == "Debug"
+        @build_mode == 'Debug'
       end
 
       def target_name
-        #区分多平台，如配置了多平台，会带上平台的名字
+        # 区分多平台，如配置了多平台，会带上平台的名字
         # 如libwebp-iOS
         if @spec.available_platforms.count > 1
           "#{@spec.name}-#{Platform.string_name(@spec.consumer(@platform).platform_name)}"
@@ -189,12 +156,11 @@ module CBin
         end
       end
 
-      def xcodebuild(defines = '', args = '', build_dir = 'build', build_model = 'Debug')
-
-        unless File.exist?("Pods.xcodeproj") #cocoapods-generate v2.0.0
-          command = "xcodebuild #{defines} #{args} CONFIGURATION_BUILD_DIR=#{File.join(File.expand_path("..", build_dir), File.basename(build_dir))} clean build -configuration #{build_model} -target #{target_name} -project ./Pods/Pods.xcodeproj 2>&1"
-        else
-          command = "xcodebuild #{defines} #{args} CONFIGURATION_BUILD_DIR=#{build_dir} clean build -configuration #{build_model} -target #{target_name} -project ./Pods.xcodeproj 2>&1"
+      def xcodebuild(defines = '', args = '', build_dir = 'build', build_mode = 'Debug')
+        if File.exist?('Pods.xcodeproj')
+          command = "xcodebuild #{defines} #{args} CONFIGURATION_BUILD_DIR=#{build_dir} clean build -configuration #{build_mode} -target #{target_name} -project ./Pods.xcodeproj 2>&1"
+        else # cocoapods-generate v2.0.0
+          command = "xcodebuild #{defines} #{args} CONFIGURATION_BUILD_DIR=#{File.join(File.expand_path("..", build_dir), File.basename(build_dir))} clean build -configuration #{build_mode} -target #{target_name} -project ./Pods/Pods.xcodeproj 2>&1"
         end
 
         UI.message "command = #{command}"
@@ -212,10 +178,10 @@ module CBin
       end
 
       def copy_headers
-        #走 podsepc中的public_headers
-        public_headers = Array.new
+        # 走 podsepc中的public_headers
+        public_headers = []
 
-        #by slj 如果没有头文件，去 "Headers/Public"拿
+        # by slj 如果没有头文件，去 "Headers/Public"拿
         # if public_headers.empty?
         spec_header_dir = CBin::Build::Utils.spec_header_dir(@spec)
         raise "copy_headers #{spec_header_dir} no exist " unless File.exist?(spec_header_dir)
@@ -223,7 +189,7 @@ module CBin
         Dir.chdir(spec_header_dir) do
           headers = Dir.glob('*.{h,hpp}')
           headers.each do |h|
-            public_headers << Pathname.new(File.join(Dir.pwd,h))
+            public_headers << Pathname.new(File.join(Dir.pwd, h))
           end
         end
         # end
@@ -239,9 +205,7 @@ module CBin
         # create a default 'module_map' one using it.
         if !@spec.module_map.nil?
           module_map_file = @file_accessor.module_map
-          if Pathname(module_map_file).exist?
-            module_map = File.read(module_map_file)
-          end
+          module_map = File.read(module_map_file) if Pathname(module_map_file).exist?
         elsif public_headers.map(&:basename).map(&:to_s).include?("#{@spec.name}.h")
           module_map = <<-MAP
           framework module #{@spec.name} {
@@ -255,16 +219,12 @@ module CBin
           # by ChildhoodAndy
           # try to read modulemap file from module dir
           module_map_file = File.join(CBin::Build::Utils.spec_module_dir(@spec), "#{@spec.name}.modulemap")
-          if Pathname(module_map_file).exist?
-            module_map = File.read(module_map_file)
-          end
+          module_map = File.read(module_map_file) if Pathname(module_map_file).exist?
         end
 
         unless module_map.nil?
           UI.message "Writing module map #{module_map}"
-          unless framework.module_map_path.exist?
-            framework.module_map_path.mkpath
-          end
+          framework.module_map_path.mkpath unless framework.module_map_path.exist?
           File.write("#{framework.module_map_path}/module.modulemap", module_map)
         end
       end
@@ -295,18 +255,16 @@ module CBin
           bundle_names.include?(bundle_name)
         end
 
-        if bundles.count > 0
+        if bundles.count.positive?
           UI.message "Copying bundle files #{bundles}"
           bundle_files = bundles.join(' ')
           `cp -rp #{bundle_files} #{framework.resources_path} 2>&1`
         end
 
         real_source_dir = @source_dir
-        unless @isRootSpec
-          spec_source_dir = File.join(Dir.pwd,"#{@spec.name}")
-          unless File.exist?(spec_source_dir)
-            spec_source_dir = File.join(Dir.pwd,"Pods/#{@spec.name}")
-          end
+        unless @is_root_spec
+          spec_source_dir = File.join(Dir.pwd, @spec.name.to_s)
+          spec_source_dir = File.join(Dir.pwd, "Pods/#{@spec.name}") unless File.exist?(spec_source_dir)
           raise "copy_resources #{spec_source_dir} no exist " unless File.exist?(spec_source_dir)
 
           real_source_dir = spec_source_dir
@@ -315,13 +273,13 @@ module CBin
           expand_paths(real_source_dir, spec.consumer(@platform).resources)
         end.compact.uniq
 
-        if resources.count == 0 && bundles.count == 0
+        if resources.count.zero? && bundles.count.zero?
           framework.delete_resources
           return
         end
 
-        if resources.count > 0
-          #把 路径转义。 避免空格情况下拷贝失败
+        if resources.count.positive?
+          # 把 路径转义。 避免空格情况下拷贝失败
           escape_resource = []
           resources.each do |source|
             escape_resource << Shellwords.join(source)
@@ -337,21 +295,21 @@ module CBin
         (ios_architectures + ios_architectures_sim).map do |arch|
           arch_swiftmodule = File.join(Dir.pwd, "build-#{arch}/#{@spec.name}.swiftmodule")
           unless File.exist?(arch_swiftmodule)
-            module_name = @spec.name.gsub("-", "_")
+            module_name = @spec.name.gsub('-', '_')
             arch_swiftmodule = File.join(Dir.pwd, "build-#{arch}/#{module_name}.swiftmodule")
           end
           swiftmodules << "#{arch_swiftmodule}/*" if File.exist?(arch_swiftmodule)
         end
         dst_dir = File.join(Dir.pwd, framework.swift_module_path)
         FileUtils.rm_rf(dst_dir) if File.exist?(dst_dir)
-        if swiftmodules.count > 0
-          #拷贝swiftmodules文件夹下所有文件
+        if swiftmodules.count.positive?
+          # 拷贝swiftmodules文件夹下所有文件
           FileUtils.mkdir_p(dst_dir) unless File.exist?(dst_dir)
           `cp -rp #{swiftmodules.join(' ')} #{dst_dir}`
-          #删除Project文件夹
-          sourceinfo = File.join(dst_dir, "Project")
+          # 删除Project文件夹
+          sourceinfo = File.join(dst_dir, 'Project')
           FileUtils.rm_rf(sourceinfo) if File.exist?(sourceinfo)
-          #重写module.modulemap
+          # 重写module.modulemap
           module_map = <<-MAP
           framework module #{module_name} {
             umbrella header "#{@spec.name}-umbrella.h"
@@ -365,11 +323,9 @@ module CBin
             requires objc
           }
           MAP
-          unless framework.module_map_path.exist?
-            framework.module_map_path.mkpath
-          end
+          framework.module_map_path.mkpath unless framework.module_map_path.exist?
           File.write("#{framework.module_map_path}/module.modulemap", module_map)
-          #拷贝"#{@spec.name}-Swift.h"
+          # 拷贝"#{@spec.name}-Swift.h"
           (ios_architectures + ios_architectures_sim).map do |arch|
             swiftheader = File.join(Dir.pwd, "build-#{arch}/Swift Compatibility Header/#{module_name}-Swift.h")
             if File.exist?(swiftheader)
@@ -388,10 +344,10 @@ module CBin
 
       def framework
         @framework ||= begin
-                         framework = Framework.new(@spec.name, @platform.name.to_s)
-                         framework.make
-                         framework
-                       end
+          framework = Framework.new(@spec.name, @platform.name.to_s)
+          framework.make
+          framework
+        end
       end
 
 
