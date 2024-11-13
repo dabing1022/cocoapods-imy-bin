@@ -313,7 +313,7 @@ module CBin
           module_map = <<-MAP
           framework module #{module_name} {
             umbrella header "#{@spec.name}-umbrella.h"
-          
+
             export *
             module * { export * }
           }

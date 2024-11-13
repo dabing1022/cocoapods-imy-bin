@@ -35,6 +35,11 @@ module Pod
       def set_configuration_env(env = "dev")
         set_internal_hash_value(CONFIGURATION_ENV, env)
       end
+
+      def set_binary_build_for_distribution(flag = false)
+        set_internal_hash_value(BINARY_BUILD_FOR_DISTRIBUTION, flag)
+      end
+
     end
 
     alias old_plugins plugins
@@ -67,6 +72,10 @@ module Pod
 
     def configuration_env
       get_internal_hash_value(CONFIGURATION_ENV, "dev") ||  ENV[CONFIGURATION_ENV] == "dev"
+    end
+
+    def binary_build_for_distribution
+      get_internal_hash_value(BINARY_BUILD_FOR_DISTRIBUTION, false)
     end
 
     private

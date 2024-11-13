@@ -1,4 +1,5 @@
 require 'yaml'
+require 'ostruct'
 require 'cocoapods-imy-bin/native/podfile'
 require 'cocoapods-imy-bin/native/podfile_env'
 require 'cocoapods/generate'

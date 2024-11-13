@@ -7,6 +7,7 @@ require 'cocoapods-imy-bin/command/bin/code'
 require 'cocoapods-imy-bin/command/bin/update'
 require 'cocoapods-imy-bin/command/bin/install'
 require 'cocoapods-imy-bin/command/bin/imy'
+require 'cocoapods-imy-bin/command/bin/collect'
 
 require 'cocoapods-imy-bin/helpers'
 

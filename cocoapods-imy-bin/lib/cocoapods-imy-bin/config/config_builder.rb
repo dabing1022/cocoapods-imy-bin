@@ -190,6 +190,7 @@ module CBin
           parent_dir = File.dirname(Pod::Config.instance.installation_root)
           root_name = File.join(parent_dir, "#{basename}-build-temp")
           Dir.mkdir(root_name) unless File.exist? root_name
+          root_name
         end
       end
 
