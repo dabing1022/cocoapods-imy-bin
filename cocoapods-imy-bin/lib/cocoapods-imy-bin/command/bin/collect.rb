@@ -1,3 +1,5 @@
+require 'cocoapods-imy-bin/helpers/binary_spec_creator'
+
 module Pod
   class Command
     class Bin < Command
@@ -43,6 +45,7 @@ module Pod
             next if framework_path.nil?
 
             create_xcframework(pod_name, framework_path)
+            generate_binary_podspec(pod_name)
           end
         end
 
@@ -166,7 +169,12 @@ module Pod
 
         # 生成二进制 podspec
         def generate_binary_podspec(pod_name)
+          spec_json_path = podspec_json_path(pod_name)
+          return nil if spec_json_path.nil?
 
+          binary_spec_creator = CBin::BinarySpecification::Creator.new(spec_json_path)
+          target_binary_spec_path = File.join(pod_collection_cache_dir(pod_name), "#{pod_name}.binary.podspec.json")
+          binary_spec_creator.write_binary_spec(target_binary_spec_path)
         end
 
         def pod_product_name(pod_name)
@@ -287,7 +295,7 @@ module Pod
 
         def podspec_json_path(pod_name)
           sandbox_path = Pod::Config.instance.sandbox.root
-          podspec_json_path = File.join(sandbox_path, 'Pods', 'Local Podspecs', "#{pod_name}.podspec.json")
+          podspec_json_path = File.join(sandbox_path, 'Local Podspecs', "#{pod_name}.podspec.json")
           return nil unless File.exist?(podspec_json_path)
           podspec_json_path
         end
