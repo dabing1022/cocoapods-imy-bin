@@ -294,10 +294,19 @@ module Pod
         end
 
         def podspec_json_path(pod_name)
-          sandbox_path = Pod::Config.instance.sandbox.root
-          podspec_json_path = File.join(sandbox_path, 'Local Podspecs', "#{pod_name}.podspec.json")
+          podspec_json_path = File.join(cbin_local_podspecs_dir, "#{pod_name}.podspec.json")
           return nil unless File.exist?(podspec_json_path)
+
           podspec_json_path
+        end
+
+        def cbin_local_podspecs_dir
+          @cbin_local_podspecs_dir ||= begin
+            sandbox_path = Pod::Config.instance.sandbox.root
+            cbin_local_podspecs_dir = File.join(sandbox_path, 'CBin Local Podspecs')
+            FileUtils.mkdir_p(cbin_local_podspecs_dir) unless Dir.exist?(cbin_local_podspecs_dir)
+            cbin_local_podspecs_dir
+          end
         end
 
         def build_xcframework(pod_name)

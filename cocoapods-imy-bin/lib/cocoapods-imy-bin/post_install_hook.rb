@@ -67,6 +67,19 @@ Pod::HooksManager.register('cocoapods-imy-bin', :post_install) do |context|
     end
   end
 
+  collector = Pod::Command::Bin::Collect.new(CLAide::ARGV.new([]))
+
+  context.umbrella_targets.each do |target|
+    target.specs&.each do |spec|
+      next unless spec.parent.nil?
+
+      podspec_path = collector.podspec_json_path(spec.name)
+      next if podspec_path.nil?
+      
+      File.write(podspec_path, spec.to_pretty_json)
+    end
+  end
+
   # save product module name map to framework collection cache path
-  Pod::Command::Bin::Collect.new(CLAide::ARGV.new([])).save_product_module_name_map(product_module_name_map)
+  collector.save_product_module_name_map(product_module_name_map)
 end
