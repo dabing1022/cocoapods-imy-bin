@@ -1,4 +1,5 @@
 require 'cocoapods-imy-bin/helpers/binary_spec_creator'
+require 'cocoapods-imy-bin/helpers/wxmsg'
 
 module Pod
   class Command
@@ -20,14 +21,14 @@ module Pod
 
         def self.options
           [
-            %w[--publish 是否推送二进制到文件服务器以及是否推送二进制 podspec],
+            %w[--no_publish 不推送二进制到文件服务器以及是否推送二进制 podspec],
             %w[--override_binary 是否推送二进制覆盖已有的二进制]
           ].concat(Pod::Command::Framework::Collect.options).concat(super).uniq
         end
 
         def initialize(argv)
           @pod_list = argv.shift_argument&.split(',') || []
-          @publish = argv.flag?('publish', true)
+          @no_publish = argv.flag?('no_publish', false)
           @override_binary = argv.flag?('override_binary', false)
           super
           @additional_args = argv.remainder!
@@ -66,10 +67,20 @@ module Pod
 
               xcframework_path = create_xcframework(pod_name, framework_path)
               zip_path = zip_xcframework(pod_name, xcframework_path)
-              upload_zip(pod_name, zip_path) if @publish
+              upload_zip(pod_name, zip_path) unless @no_publish
 
               binary_spec_json_path = generate_binary_podspec(pod_name)
-              push_binary_repo(binary_spec_json_path) if @publish
+              push_binary_repo(binary_spec_json_path) unless @no_publish
+
+              unless @no_publish
+                spec = spec_of_pod(pod_name)
+                next if spec.nil?
+
+                Pod::UI.notice "Binary Collecting #{spec.name} #{spec.version} finished"
+
+                msg = "#{spec.name} -> #{spec.version} 二进制组件制作完成！"
+                # CBin::WXMsg.send_wechat_group_msg(msg)
+              end
             end
           end
         end
@@ -91,6 +102,7 @@ module Pod
 
           copy_steps = {
             'headers' => :copy_headers,
+            'umbrella header' => :copy_umbrella_header,
             'Swift compatibility header' => :copy_swift_compatibility_header,
             'modules' => :copy_modules,
             'resources' => :copy_resources,
@@ -120,6 +132,13 @@ module Pod
           File.join(Pod::Config.instance.sandbox.root.to_s, 'product_module_name_map.json')
         end
 
+        def podspec_json_path(pod_name)
+          podspec_json_path = File.join(cbin_local_podspecs_dir, "#{pod_name}.podspec.json")
+          return nil unless File.exist?(podspec_json_path)
+
+          podspec_json_path
+        end
+
         private
 
         def create_xcframework(pod_name, framework_path)
@@ -132,7 +151,12 @@ module Pod
 
         def copy_lib(pod_name)
           lib_path = pod_lib_path(pod_name)
-          return nil if lib_path.nil?
+          if lib_path.nil?
+            pod_product_dir = pod_product_dir(pod_name)
+            path = File.join(pod_product_dir, "lib#{pod_name}.a")
+            Pod::UI.warn "未找到 #{pod_name} 的构建产物 #{path}"
+            return
+          end
 
           pod_framework_path = pod_collection_framework_path(pod_name)
 
@@ -178,8 +202,9 @@ module Pod
           product_name = pod_product_name(pod_name)
           if modulemap_files.empty?
             # Generate manual modulemap if none exists
+            # 注意这里要使用 framework module 而不是 module, 否则会找不到 umbrella header
             modulemap_content = <<~MODULEMAP
-              module #{product_name} {
+              framework module #{product_name} {
                 umbrella header "#{product_name}-umbrella.h"
               #{'  '}
                 export *
@@ -189,12 +214,63 @@ module Pod
             File.write("#{framework_modules_dir}/module.modulemap", modulemap_content)
           else
             # Copy existing modulemap
+            target_header = File.join(framework_modules_dir, 'module.modulemap')
             modulemap_files.each do |header|
               if File.symlink?(header)
                 real_header = File.realpath(header)
-                FileUtils.cp_r(real_header, "#{framework_modules_dir}/module.modulemap")
+                FileUtils.cp_r(real_header, target_header)
               else
-                FileUtils.cp_r(header, "#{framework_modules_dir}/module.modulemap")
+                FileUtils.cp_r(header, target_header)
+              end
+              # modify modulemap content
+              modulemap_content = File.read(target_header)
+              # Only replace 'module' if it's not already 'framework module'
+              modulemap_content.sub!(/(?<!framework\s)module/, 'framework module')
+              File.write(target_header, modulemap_content)
+            end
+          end
+        end
+
+        def copy_umbrella_header(pod_name)
+          sandbox_path = Pod::Config.instance.sandbox.root
+          pod_headers = File.join(sandbox_path.to_s, 'Headers', 'Public', pod_name)
+          framework_header_dir = pod_collection_framework_headers_dir pod_name
+
+          umbrella_header_files = Dir.glob(File.join(pod_headers, '*-umbrella.h'))
+          product_name = pod_product_name(pod_name)
+          if umbrella_header_files.empty?
+            # Generate manual umbrella header if none exists
+            import_header_statements = Dir.glob(File.join(pod_headers, '*.{h,hpp,hxx,hh}')).map { |header| "#import \"#{File.basename(header)}\"" }.join("\n")
+            # only support iphoneos
+            umbrella_header_content = <<~UMBRELLA_HEADER
+#ifdef __OBJC__
+#import <UIKit/UIKit.h>
+#else
+#ifndef FOUNDATION_EXPORT
+#if defined(__cplusplus)
+#define FOUNDATION_EXPORT extern "C"
+#else
+#define FOUNDATION_EXPORT extern
+#endif
+#endif
+#endif
+
+// auto generated by cocoapods-imy-bin
+
+#{import_header_statements}
+
+FOUNDATION_EXPORT double #{product_name}VersionNumber;
+FOUNDATION_EXPORT const unsigned char #{product_name}VersionString[];
+            UMBRELLA_HEADER
+            File.write("#{framework_header_dir}/#{pod_name}-umbrella.h", umbrella_header_content)
+          else
+            # Copy existing umbrella header
+            umbrella_header_files.each do |header|
+              if File.symlink?(header)
+                real_header = File.realpath(header)
+                FileUtils.cp_r(real_header, "#{framework_header_dir}/#{pod_name}-umbrella.h")
+              else
+                FileUtils.cp_r(header, "#{framework_header_dir}/#{pod_name}-umbrella.h")
               end
             end
           end
@@ -237,9 +313,13 @@ module Pod
           product_module_map_json[pod_name] || pod_name
         end
 
+        def pod_product_dir(pod_name)
+          File.join(@build_products_dir, pod_name)
+        end
+
         # 获取pod的lib路径
         def pod_lib_path(pod_name)
-          pod_product_dir = File.join(@build_products_dir, pod_name)
+          pod_product_dir = pod_product_dir(pod_name)
           return nil unless Dir.exist?(pod_product_dir)
 
           Dir.chdir(pod_product_dir) do
@@ -323,13 +403,6 @@ module Pod
           resources_path
         end
 
-        def podspec_json_path(pod_name)
-          podspec_json_path = File.join(cbin_local_podspecs_dir, "#{pod_name}.podspec.json")
-          return nil unless File.exist?(podspec_json_path)
-
-          podspec_json_path
-        end
-
         def cbin_local_podspecs_dir
           @cbin_local_podspecs_dir ||= begin
             sandbox_path = Pod::Config.instance.sandbox.root
@@ -342,9 +415,18 @@ module Pod
         def zip_xcframework(pod_name, xcframework_path)
           pod_collection_cache_dir = pod_collection_cache_dir(pod_name)
           xcframework_zip_path = File.join(pod_collection_cache_dir, "#{pod_name}.zip")
-          `zip --symlinks -r #{xcframework_zip_path} #{xcframework_path}`
+          Dir.chdir(File.dirname(xcframework_path)) do
+            `zip --symlinks -r #{xcframework_zip_path} #{File.basename(xcframework_path)}`
+          end
 
           xcframework_zip_path
+        end
+
+        def spec_of_pod(pod_name)
+          spec_file = podspec_json_path(pod_name)
+          return nil if spec_file.nil?
+
+          Pod::Specification.from_file(spec_file)
         end
 
         # 推送二进制
@@ -355,13 +437,12 @@ module Pod
             return
           end
 
-          delete_binary(pod_name) if @publish && @override_binary
+          delete_binary(pod_name) if @override_binary
+
+          spec = spec_of_pod(pod_name)
+          return if spec.nil?
 
           upload_url = CBin.config.binary_upload_url
-          spec_file = podspec_json_path(pod_name)
-          return if spec_file.nil?
-
-          spec = Pod::Specification.from_file(spec_file)
           command = "curl #{upload_url} -F \"name=#{spec.name}\" " \
                     "-F \"version=#{spec.version}\" " \
                     "-F \"annotate=#{spec.name}_#{spec.version}_log\" " \
@@ -379,11 +460,11 @@ module Pod
 
         def delete_binary(pod_name)
           # binary_download_url: http://binary.zhuaninc.com/frameworks/%s/%s/zip
-          #  curl -v -X DELETE http://binary.zhuaninc.com/frameworks/lottie-ios/2.1.8-stable+zhuanzhuan
-          upload_url = CBin.config.binary_upload_url
+          # curl -v -X DELETE http://binary.zhuaninc.com/frameworks/lottie-ios/2.1.8-stable+zhuanzhuan
+          spec = spec_of_pod(pod_name)
+          return if spec.nil?
 
-          spec_file = podspec_json_path(pod_name)
-          spec = Pod::Specification.from_file(spec_file)
+          upload_url = CBin.config.binary_upload_url
           full_url = "#{upload_url}/#{spec.name}/#{spec.version}"
           command = "curl -v -X DELETE #{full_url}"
           Pod::UI.notice <<~EOF

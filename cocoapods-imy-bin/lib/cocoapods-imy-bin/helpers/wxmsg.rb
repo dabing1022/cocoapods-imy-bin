@@ -26,8 +26,8 @@ module CBin
       {
         'msgtype' => 'text',
         'text' => {
-          'content' => content,
-          'mentioned_list' => ['@all']
+          'content' => content
+          # 'mentioned_list' => ['@all']
         }
       }
     end

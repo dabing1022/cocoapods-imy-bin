@@ -22,10 +22,7 @@ module Pod
           alias old_add_swift_library_compatibility_header_phase add_swift_library_compatibility_header_phase
 
           def add_swift_library_compatibility_header_phase(native_target)
-            UI.warn("========= swift add_swift_library_compatibility_header_phase")
             if $ARGV[1] == "auto"
-              UI.warn("========= auto swift add_swift_library_compatibility_header_phase")
-
               if custom_module_map
                 raise Informative, 'Using Swift static libraries with custom module maps is currently not supported. ' \
                                  "Please build `#{target.label}` as a framework or remove the custom module map."
@@ -80,7 +77,6 @@ module Pod
               ${BUILT_PRODUCTS_DIR}/Swift\ Compatibility\ Header/${PRODUCT_MODULE_NAME}-Swift.h
             )
             else
-              UI.warn("========= null swift add_swift_library_compatibility_header_phase")
               old_add_swift_library_compatibility_header_phase(native_target)
             end
 

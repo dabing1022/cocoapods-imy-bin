@@ -33,6 +33,7 @@ module CBin
           process_exclude_files(spec_hash)
           process_preserve_paths(spec_hash)
           process_vendored_libraries(spec_hash)
+          process_prepare_command(spec_hash)
           @local_spec = Pod::Specification.from_hash(spec_hash)
         end
       end
@@ -73,6 +74,10 @@ module CBin
       def process_source_files(spec_hash)
         spec_hash.delete('source_files')
         spec_hash.delete('public_header_files')
+      end
+
+      def process_prepare_command(spec_hash)
+        spec_hash.delete('prepare_command')
       end
 
       def binary_source
