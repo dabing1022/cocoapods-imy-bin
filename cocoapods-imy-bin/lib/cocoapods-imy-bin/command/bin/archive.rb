@@ -41,8 +41,8 @@ module Pod
         def initialize(argv)
           @env = argv.option('env') || 'dev'
           CBin.config.set_configuration_env(@env)
-          UI.warn "====== cocoapods-imy-bin #{CBin::VERSION} 版本 ======== \n "
-          UI.warn "======  #{@env} 环境 ======== \n "
+          UI.warn "====== cocoapods-imy-bin 版本: #{CBin::VERSION} ======== \n "
+          UI.warn "====== cocoapods-imy-bin 环境: #{@env} ======== \n "
 
           @code_dependencies = argv.flag?('code-dependencies')
           @framework_output = argv.flag?('framework-output', false )

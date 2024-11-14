@@ -24,15 +24,17 @@ module CBin
       end
 
       def process_local_spec
-        spec_hash = local_spec.to_hash
-        process_vendored_frameworks(spec_hash)
-        process_source(spec_hash)
-        process_resources(spec_hash)
-        process_source_files(spec_hash)
-        process_exclude_files(spec_hash)
-        process_preserve_paths(spec_hash)
-        process_vendored_libraries(spec_hash)
-        @local_spec = Pod::Specification.from_hash(spec_hash)
+        Pod::UI.section "Processing binary spec #{local_spec.name} #{local_spec.version}" do
+          spec_hash = local_spec.to_hash
+          process_vendored_frameworks(spec_hash)
+          process_source(spec_hash)
+          process_resources(spec_hash)
+          process_source_files(spec_hash)
+          process_exclude_files(spec_hash)
+          process_preserve_paths(spec_hash)
+          process_vendored_libraries(spec_hash)
+          @local_spec = Pod::Specification.from_hash(spec_hash)
+        end
       end
 
       def process_source(spec_hash)
@@ -42,7 +44,7 @@ module CBin
       def process_vendored_frameworks(spec_hash)
         module_name = module_name_map[local_spec.name]
         if spec_hash['vendored_frameworks'].nil?
-          local_spec.vendored_frameworks = "#{module_name}.xcframework"
+          spec_hash['vendored_frameworks'] = "#{module_name}.xcframework"
         else
           # If vendored_frameworks is a string, convert to array
           existing_frameworks = spec_hash['vendored_frameworks'].is_a?(String) ? [spec_hash['vendored_frameworks']] : spec_hash['vendored_frameworks']

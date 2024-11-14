@@ -3,6 +3,7 @@
 require 'cocoapods-imy-bin/native/sources_manager.rb'
 
 module CBin
+  # podfile source helper
   module SourcesHelper
     def sources_manager
       Pod::Config.instance.sources_manager

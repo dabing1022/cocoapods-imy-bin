@@ -1,4 +1,3 @@
-
 require 'cocoapods-imy-bin/command/bin/initHotKey'
 require 'cocoapods-imy-bin/command/bin/init'
 require 'cocoapods-imy-bin/command/bin/archive'

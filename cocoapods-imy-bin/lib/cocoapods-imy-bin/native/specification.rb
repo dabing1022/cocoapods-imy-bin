@@ -1,4 +1,4 @@
-
+# frozen_string_literal: true
 
 require 'cocoapods-imy-bin/native/sources_manager'
 

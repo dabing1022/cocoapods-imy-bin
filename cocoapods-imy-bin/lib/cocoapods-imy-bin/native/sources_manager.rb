@@ -5,6 +5,7 @@ require 'cocoapods-imy-bin/config/config'
 
 module Pod
   class Source
+    # podfile source manager
     class Manager
       # 源码 source
       def code_source

@@ -3,8 +3,10 @@ require 'cocoapods-imy-bin/helpers/binary_spec_creator'
 module Pod
   class Command
     class Bin < Command
-      # 静态库归档
+       # 静态库归档
       class Collect < Bin
+        include CBin::SourcesHelper
+
         self.summary = '静态库Framework收集'
         self.description = <<-DESC
             将组件归档为静态库 framework
@@ -14,13 +16,19 @@ module Pod
           CLAide::Argument.new('pods_list', true)
         ]
 
+        BINARY_COLLECTIONS_DIR = 'BinaryCollections'.freeze
+
         def self.options
-          [].concat(Pod::Command::Framework::Collect.options).concat(super).uniq
+          [
+            %w[--publish 是否推送二进制到文件服务器以及是否推送二进制 podspec],
+            %w[--override_binary 是否推送二进制覆盖已有的二进制]
+          ].concat(Pod::Command::Framework::Collect.options).concat(super).uniq
         end
 
         def initialize(argv)
           @pod_list = argv.shift_argument&.split(',') || []
-
+          @publish = argv.flag?('publish', true)
+          @override_binary = argv.flag?('override_binary', false)
           super
           @additional_args = argv.remainder!
         end
@@ -33,19 +41,36 @@ module Pod
           # echo "BUILD_DIR ${BUILD_DIR}"
           # echo "BUILD_ROOT ${BUILD_ROOT}"
           @build_products_dir = ENV['XCODE_BUILT_PRODUCTS_DIR']
+          if @build_products_dir.nil?
+            Pod::UI.warn '=================================================================================================='
+            Pod::UI.warn '未找到构建产物目录，请确认是否在环境变量中设置了 XCODE_BUILT_PRODUCTS_DIR (export XCODE_BUILT_PRODUCTS_DIR=xxx)'
+            Pod::UI.warn '=================================================================================================='
+            return
+          end
           # such as: iphoneos, iphonesimulator
           @build_configuration = Pathname.new(@build_products_dir).basename.to_s.split('-').last
+          if @build_configuration.nil?
+            Pod::UI.warn '=================================================================================================='
+            Pod::UI.warn "#{@build_products_dir} 不是一个有效的构建产物目录"
+            Pod::UI.warn '=================================================================================================='
+          end
 
-          puts "xcode: build_products_dir: #{@build_products_dir}"
+          Pod::UI.notice "Xcode: build_products_dir: #{@build_products_dir}"
 
           clean_collection_cache
 
           @pod_list.each do |pod_name|
-            framework_path = collect_framework pod_name
-            next if framework_path.nil?
+            Pod::UI.section("Binary Collecting #{pod_name}") do
+              framework_path = collect_framework pod_name
+              next if framework_path.nil?
 
-            create_xcframework(pod_name, framework_path)
-            generate_binary_podspec(pod_name)
+              xcframework_path = create_xcframework(pod_name, framework_path)
+              zip_path = zip_xcframework(pod_name, xcframework_path)
+              upload_zip(pod_name, zip_path) if @publish
+
+              binary_spec_json_path = generate_binary_podspec(pod_name)
+              push_binary_repo(binary_spec_json_path) if @publish
+            end
           end
         end
 
@@ -60,20 +85,49 @@ module Pod
         end
 
         def collect_framework(pod_name)
-          pod_framework_path = copy_lib pod_name
-          copy_headers pod_name
-          copy_swift_compatibility_header pod_name
-          copy_modules pod_name
-          copy_resources pod_name
-          copy_swiftmodule pod_name
+          pod_framework_path = Pod::UI.info('-> Copying library') do
+            copy_lib(pod_name)
+          end
+
+          copy_steps = {
+            'headers' => :copy_headers,
+            'Swift compatibility header' => :copy_swift_compatibility_header,
+            'modules' => :copy_modules,
+            'resources' => :copy_resources,
+            'Swift module' => :copy_swiftmodule
+          }
+
+          copy_steps.each do |component, method|
+            Pod::UI.info("-> Copying #{component}") do
+              send(method, pod_name)
+            end
+          end
 
           pod_framework_path
         end
+
+        def save_product_module_name_map(product_module_name_map)
+          File.write(product_module_map_json_path, JSON.pretty_generate(product_module_name_map))
+        end
+
+        def product_module_map_json
+          return {} unless File.exist?(product_module_map_json_path)
+
+          @product_module_map_json ||= JSON.parse(File.read(product_module_map_json_path))
+        end
+
+        def product_module_map_json_path
+          File.join(Pod::Config.instance.sandbox.root.to_s, 'product_module_name_map.json')
+        end
+
+        private
 
         def create_xcframework(pod_name, framework_path)
           pod_collection_cache_dir = pod_collection_cache_dir(pod_name)
           xcframework_path = File.join(pod_collection_cache_dir, File.basename(framework_path).gsub('.framework', '.xcframework'))
           `xcodebuild -create-xcframework -framework #{framework_path} -output #{xcframework_path}`
+
+          xcframework_path
         end
 
         def copy_lib(pod_name)
@@ -91,7 +145,7 @@ module Pod
         def copy_headers(pod_name)
           sandbox_path = Pod::Config.instance.sandbox.root
           product_name = pod_product_name(pod_name)
-          pod_headers = File.join(sandbox_path, 'Headers', 'Public', product_name)
+          pod_headers = File.join(sandbox_path.to_s, 'Headers', 'Public', product_name)
           framework_header_dir = pod_collection_framework_headers_dir pod_name
 
           Dir.glob(File.join(pod_headers, '*')).each do |header|
@@ -117,7 +171,7 @@ module Pod
 
         def copy_modules(pod_name)
           sandbox_path = Pod::Config.instance.sandbox.root
-          pod_headers = File.join(sandbox_path, 'Headers', 'Public', pod_name)
+          pod_headers = File.join(sandbox_path.to_s, 'Headers', 'Public', pod_name)
           framework_modules_dir = pod_collection_framework_modules_dir pod_name
 
           modulemap_files = Dir.glob(File.join(pod_headers, '*.modulemap'))
@@ -175,6 +229,8 @@ module Pod
           binary_spec_creator = CBin::BinarySpecification::Creator.new(spec_json_path)
           target_binary_spec_path = File.join(pod_collection_cache_dir(pod_name), "#{pod_name}.binary.podspec.json")
           binary_spec_creator.write_binary_spec(target_binary_spec_path)
+
+          target_binary_spec_path
         end
 
         def pod_product_name(pod_name)
@@ -231,66 +287,40 @@ module Pod
         end
 
         def collection_cache_path
-          cache_path ||= begin
-            cache_path = File.join(Pod::Config.instance.sandbox.root.to_s, 'FrameworkCollections')
-            FileUtils.mkdir_p(cache_path) unless Dir.exist?(cache_path)
-            cache_path
-          end
-        end
-
-        def save_product_module_name_map(product_module_name_map)
-          File.write(product_module_map_json_path, JSON.pretty_generate(product_module_name_map))
-        end
-
-        def product_module_map_json
-          return {} unless File.exist?(product_module_map_json_path)
-
-          @product_module_map_json ||= JSON.parse(File.read(product_module_map_json_path))
-        end
-
-        def product_module_map_json_path
-          File.join(Pod::Config.instance.sandbox.root.to_s, 'product_module_name_map.json')
+          cache_path = File.join(Pod::Config.instance.sandbox.root.to_s, BINARY_COLLECTIONS_DIR)
+          FileUtils.mkdir_p(cache_path) unless Dir.exist?(cache_path)
+          cache_path
         end
 
         def pod_collection_cache_dir(pod_name)
-          cache_dir ||= begin
-            cache_dir = File.join(collection_cache_path, pod_name)
-            FileUtils.mkdir_p(cache_dir) unless Dir.exist?(cache_dir)
-            cache_dir
-          end
+          cache_dir = File.join(collection_cache_path, pod_name)
+          FileUtils.mkdir_p(cache_dir) unless Dir.exist?(cache_dir)
+          cache_dir
         end
 
         def pod_collection_framework_path(pod_name)
-          framework_path ||= begin
-            product_name = pod_product_name(pod_name)
-            framework_path = File.join(pod_collection_cache_dir(pod_name), @build_configuration, "#{product_name}.framework")
-            FileUtils.mkdir_p(framework_path) unless Dir.exist?(framework_path)
-            framework_path
-          end
+          product_name = pod_product_name(pod_name)
+          framework_path = File.join(pod_collection_cache_dir(pod_name), @build_configuration, "#{product_name}.framework")
+          FileUtils.mkdir_p(framework_path) unless Dir.exist?(framework_path)
+          framework_path
         end
 
         def pod_collection_framework_headers_dir(pod_name)
-          headers_path ||= begin
-            headers_path = File.join(pod_collection_framework_path(pod_name), 'Headers')
-            FileUtils.mkdir_p(headers_path) unless Dir.exist?(headers_path)
-            headers_path
-          end
+          headers_path = File.join(pod_collection_framework_path(pod_name), 'Headers')
+          FileUtils.mkdir_p(headers_path) unless Dir.exist?(headers_path)
+          headers_path
         end
 
         def pod_collection_framework_modules_dir(pod_name)
-          modules_path ||= begin
-            modules_path = File.join(pod_collection_framework_path(pod_name), 'Modules')
-            FileUtils.mkdir_p(modules_path) unless Dir.exist?(modules_path)
-            modules_path
-          end
+          modules_path = File.join(pod_collection_framework_path(pod_name), 'Modules')
+          FileUtils.mkdir_p(modules_path) unless Dir.exist?(modules_path)
+          modules_path
         end
 
         def pod_collection_framework_resources_dir(pod_name)
-          resources_path ||= begin
-            resources_path = File.join(pod_collection_framework_path(pod_name), 'Resources')
-            FileUtils.mkdir_p(resources_path) unless Dir.exist?(resources_path)
-            resources_path
-          end
+          resources_path = File.join(pod_collection_framework_path(pod_name), 'Resources')
+          FileUtils.mkdir_p(resources_path) unless Dir.exist?(resources_path)
+          resources_path
         end
 
         def podspec_json_path(pod_name)
@@ -309,21 +339,79 @@ module Pod
           end
         end
 
-        def build_xcframework(pod_name)
-          # 1. 找到对应的framework
-          # 2. 拷贝到指定的目录
-          # 3. 修改framework的名字
-          # 4. 修改framework的引用
-          # 5. 使用xcodebuild -create-xcframework命令创建xcframework
+        def zip_xcframework(pod_name, xcframework_path)
+          pod_collection_cache_dir = pod_collection_cache_dir(pod_name)
+          xcframework_zip_path = File.join(pod_collection_cache_dir, "#{pod_name}.zip")
+          `zip --symlinks -r #{xcframework_zip_path} #{xcframework_path}`
+
+          xcframework_zip_path
         end
 
-        def zip_xcframework(pod_name)
+        # 推送二进制
+        # curl http://ci.xxx:9192/frameworks -F "name=IMYFoundation" -F "version=7.7.4.2" -F "annotate=IMYFoundation_7.7.4.2_log" -F "file=@bin-zip/bin_IMYFoundation_7.7.4.2.zip"
+        def upload_zip(pod_name, zip_file)
+          unless File.exist?(zip_file)
+            Pod::UI.warn "未找到需要上传的文件: #{zip_file}"
+            return
+          end
 
+          delete_binary(pod_name) if @publish && @override_binary
 
+          upload_url = CBin.config.binary_upload_url
+          spec_file = podspec_json_path(pod_name)
+          return if spec_file.nil?
+
+          spec = Pod::Specification.from_file(spec_file)
+          command = "curl #{upload_url} -F \"name=#{spec.name}\" " \
+                    "-F \"version=#{spec.version}\" " \
+                    "-F \"annotate=#{spec.name}_#{spec.version}_log\" " \
+                    "-F \"file=@#{zip_file}\""
+
+          Pod::UI.notice <<~EOF
+            上传二进制文件
+            #{command}
+          EOF
+
+          upload_result = `#{command}`
+          Pod::UI.info upload_result
+          upload_result
         end
 
-        def upload_zip(zip_file)
+        def delete_binary(pod_name)
+          # binary_download_url: http://binary.zhuaninc.com/frameworks/%s/%s/zip
+          #  curl -v -X DELETE http://binary.zhuaninc.com/frameworks/lottie-ios/2.1.8-stable+zhuanzhuan
+          upload_url = CBin.config.binary_upload_url
 
+          spec_file = podspec_json_path(pod_name)
+          spec = Pod::Specification.from_file(spec_file)
+          full_url = "#{upload_url}/#{spec.name}/#{spec.version}"
+          command = "curl -v -X DELETE #{full_url}"
+          Pod::UI.notice <<~EOF
+            删除二进制文件
+            #{command}
+          EOF
+
+          delete_result = `#{command}`
+          Pod::UI.info delete_result
+          delete_result
+        end
+
+        # 上传二进制 podspec
+        def push_binary_repo(binary_podspec_json)
+          argv = [
+            binary_podspec_json.to_s,
+            '--binary',
+            "--sources=#{binary_source}",
+            '--skip-import-validation',
+            '--use-libraries',
+            '--allow-warnings',
+            '--code-dependencies'
+          ]
+          argv += ['--verbose'] if @verbose
+
+          push = Pod::Command::Bin::Repo::Push.new(CLAide::ARGV.new(argv))
+          push.validate!
+          push.run
         end
 
       end

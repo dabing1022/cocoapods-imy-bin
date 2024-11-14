@@ -12,10 +12,11 @@ require 'cocoapods-imy-bin/command/bin/spec/push'
 
 module CBin
   class Upload
+    # 上传工具类
     class Helper
       include CBin::SourcesHelper
 
-      def initialize(spec,code_dependencies,sources)
+      def initialize(spec, code_dependencies, sources)
         @spec = spec
         @code_dependencies = code_dependencies
         @sources = sources
@@ -42,13 +43,13 @@ module CBin
         spec_creator.filename
       end
 
-      #推送二进制
+      # 推送二进制
       # curl http://ci.xxx:9192/frameworks -F "name=IMYFoundation" -F "version=7.7.4.2" -F "annotate=IMYFoundation_7.7.4.2_log" -F "file=@bin-zip/bin_IMYFoundation_7.7.4.2.zip"
       def curl_zip
         zip_file = "#{CBin::Config::Builder.instance.library_file(@spec)}.zip"
         res = File.exist?(zip_file)
         unless res
-          zip_file = CBin::Config::Builder.instance.framework_zip_file(@spec) + ".zip"
+          zip_file = CBin::Config::Builder.instance.framework_zip_file(@spec) + '.zip'
           res = File.exist?(zip_file)
         end
         if res
@@ -58,30 +59,27 @@ module CBin
           #{command}
 EOF
           upload_result = `#{command}`
-          puts "#{upload_result}"
+          puts upload_result.to_s
         end
 
         res
       end
 
-
       # 上传二进制 podspec
-      def push_binary_repo(binary_podsepc_json)
-        argvs = [
-            "#{binary_podsepc_json}",
-            "--binary",
-            "--sources=#{sources_option(@code_dependencies, @sources)},https:\/\/cdn.cocoapods.org",
-            "--skip-import-validation",
-            "--use-libraries",
-            "--allow-warnings",
-            "--verbose",
-            "--code-dependencies"
+      def push_binary_repo(binary_podspec_json)
+        argv = [
+          binary_podspec_json.to_s,
+          '--binary',
+          "--sources=#{sources_option(@code_dependencies, @sources)},https:\/\/cdn.cocoapods.org",
+          '--skip-import-validation',
+          '--use-libraries',
+          '--allow-warnings',
+          '--verbose',
+          '--code-dependencies'
         ]
-        if @verbose
-          argvs += ['--verbose']
-        end
+        argv += ['--verbose'] if @verbose
 
-        push = Pod::Command::Bin::Repo::Push.new(CLAide::ARGV.new(argvs))
+        push = Pod::Command::Bin::Repo::Push.new(CLAide::ARGV.new(argv))
         push.validate!
         push.run
       end
