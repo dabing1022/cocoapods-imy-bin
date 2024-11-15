@@ -32,14 +32,13 @@ module Pod
       # 1 debug_iphoneos
       # 2 release_iphoneos
       # 需要在podfile_env 先定义  CONFIGURATION_ENV
-      def set_configuration_env(env = "dev")
+      def set_configuration_env(env = 'dev')
         set_internal_hash_value(CONFIGURATION_ENV, env)
       end
-
-      def set_binary_build_for_distribution(flag = false)
-        set_internal_hash_value(BINARY_BUILD_FOR_DISTRIBUTION, flag)
+      
+      def set_binary_collector(options = default_binary_collector)
+        set_internal_hash_value(BINARY_COLLECTOR, options)
       end
-
     end
 
     alias old_plugins plugins
@@ -71,11 +70,21 @@ module Pod
     end
 
     def configuration_env
-      get_internal_hash_value(CONFIGURATION_ENV, "dev") ||  ENV[CONFIGURATION_ENV] == "dev"
+      get_internal_hash_value(CONFIGURATION_ENV, 'dev') ||  ENV[CONFIGURATION_ENV] == 'dev'
     end
 
-    def binary_build_for_distribution
-      get_internal_hash_value(BINARY_BUILD_FOR_DISTRIBUTION, false)
+    def default_binary_collector
+      {
+        i_want_to_collect: true,
+        no_publish: false,
+        override: true,
+        build_list: [],
+        support_build_for_distribution: []
+      }
+    end
+
+    def binary_collector
+      get_internal_hash_value(BINARY_COLLECTOR, default_binary_collector)
     end
 
     private

@@ -8,8 +8,8 @@ module Pod
     ALLOW_PRERELEASE = 'allow_prerelease'.freeze
     USE_PLUGINS = 'use_plugins'.freeze
     CONFIGURATION_ENV = 'configuration_env'.freeze
-    # 二进制打包用于分发，Swift ABI 兼容性等问题，需要开启，生成 swiftinterface 文件
-    BINARY_BUILD_FOR_DISTRIBUTION = 'binary_build_for_distribution'.freeze
+    # 二进制收集器配置
+    BINARY_COLLECTOR = 'binary_collector'.freeze
 
     module ENVExecutor
       def execute_with_bin_plugin(&block)

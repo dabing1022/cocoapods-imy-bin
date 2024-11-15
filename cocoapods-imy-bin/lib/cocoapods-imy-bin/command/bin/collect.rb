@@ -21,20 +21,38 @@ module Pod
 
         def self.options
           [
-            %w[--no_publish 不推送二进制到文件服务器以及是否推送二进制 podspec],
-            %w[--override_binary 是否推送二进制覆盖已有的二进制]
+            %w[--i_want_to_collect 是否想要构建，默认为false],
+            %w[--no_publish 不推送二进制到文件服务器以及是否推送二进制podspec],
+            %w[--override 是否推送二进制覆盖已有的二进制以及是否更新索引]
           ].concat(Pod::Command::Framework::Collect.options).concat(super).uniq
         end
 
+        # 1. 先读取命令行参数
+        # 2. 后读取二进制收集器配置，配置来自于 Podfile 中的配置
         def initialize(argv)
-          @pod_list = argv.shift_argument&.split(',') || []
+          @pod_list = argv.shift_argument&.split(',')&.map(&:strip)&.uniq || []
+          @i_want_to_collect = argv.flag?('i_want_to_collect', false)
           @no_publish = argv.flag?('no_publish', false)
-          @override_binary = argv.flag?('override_binary', false)
+          @override = argv.flag?('override', false)
+
+          unless binary_collector.nil?
+            @pod_list = binary_collector['build_list']
+            @no_publish = binary_collector['no_publish']
+            @override = binary_collector['override']
+            @i_want_to_collect = binary_collector['i_want_to_collect']
+          end
+
           super
           @additional_args = argv.remainder!
         end
 
         def run
+          # @i_want_to_collect 为 true 时，表示开启二进制收集器
+          unless @i_want_to_collect
+            Pod::UI.warn '未开启二进制收集器，如果需要，请使用 pod bin collect --i_want_to_collect 开启二进制收集器'
+            return
+          end
+
           # 需要到构建产物的目录来查找构建的产物
           # /Users/childhoodandy/Library/Developer/Xcode/DerivedData/zhuanzhuan-celrvxnhshslubcbmolkalxerwvc/Build/Products/Debug-iphoneos
           # Debug-iphoneos, Release-iphoneos, Debug-iphonesimulator, Release-iphonesimulator
@@ -79,7 +97,7 @@ module Pod
                 Pod::UI.notice "Binary Collecting #{spec.name} #{spec.version} finished"
 
                 msg = "#{spec.name} -> #{spec.version} 二进制组件制作完成！"
-                # CBin::WXMsg.send_wechat_group_msg(msg)
+                CBin::WXMsg.send_wechat_group_msg(msg)
               end
             end
           end
@@ -118,6 +136,10 @@ module Pod
           pod_framework_path
         end
 
+        def podspec_json_path(pod_name)
+          File.join(cbin_local_podspecs_dir, "#{pod_name}.podspec.json")
+        end
+
         def save_product_module_name_map(product_module_name_map)
           File.write(product_module_map_json_path, JSON.pretty_generate(product_module_name_map))
         end
@@ -132,11 +154,18 @@ module Pod
           File.join(Pod::Config.instance.sandbox.root.to_s, 'product_module_name_map.json')
         end
 
-        def podspec_json_path(pod_name)
-          podspec_json_path = File.join(cbin_local_podspecs_dir, "#{pod_name}.podspec.json")
-          return nil unless File.exist?(podspec_json_path)
+        def save_binary_collector(binary_collector)
+          File.write(binary_collector_json_path, JSON.pretty_generate(binary_collector))
+        end
 
-          podspec_json_path
+        def binary_collector
+          return {} unless File.exist?(binary_collector_json_path)
+
+          @binary_collector ||= JSON.parse(File.read(binary_collector_json_path))
+        end
+
+        def binary_collector_json_path
+          File.join(Pod::Config.instance.sandbox.root.to_s, 'binary_collector.json')
         end
 
         private
@@ -144,7 +173,8 @@ module Pod
         def create_xcframework(pod_name, framework_path)
           pod_collection_cache_dir = pod_collection_cache_dir(pod_name)
           xcframework_path = File.join(pod_collection_cache_dir, File.basename(framework_path).gsub('.framework', '.xcframework'))
-          `xcodebuild -create-xcframework -framework #{framework_path} -output #{xcframework_path}`
+          # -allow-internal-distribution: https://forums.swift.org/t/building-a-xcframework-without-objective-c-interop/56444/6
+          `xcodebuild -create-xcframework -allow-internal-distribution -framework #{framework_path} -output #{xcframework_path}`
 
           xcframework_path
         end
@@ -437,7 +467,7 @@ FOUNDATION_EXPORT const unsigned char #{product_name}VersionString[];
             return
           end
 
-          delete_binary(pod_name) if @override_binary
+          delete_binary(pod_name) if @override
 
           spec = spec_of_pod(pod_name)
           return if spec.nil?
@@ -479,6 +509,8 @@ FOUNDATION_EXPORT const unsigned char #{product_name}VersionString[];
 
         # 上传二进制 podspec
         def push_binary_repo(binary_podspec_json)
+          return unless @override
+
           argv = [
             binary_podspec_json.to_s,
             '--binary',

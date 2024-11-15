@@ -65,10 +65,12 @@ module CBin
     def config_debug_iphoneos_file
       'bin_debug_iphoneos.yml'
     end
+
     # 包含arm64  armv7架构，xcodebuild 是Release模式
     def config_release_iphoneos_file
       'bin_release_iphoneos.yml'
     end
+
     # 包含x86 arm64  armv7架构，xcodebuild 是Release模式
     def config_dev_file
       'bin_dev.yml'

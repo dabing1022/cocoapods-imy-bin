@@ -25,7 +25,7 @@ module Pod
         end
       else
         old_install_pod_sources
-        end
+      end
     end
 
     # rewrite install_pod_sources
@@ -73,13 +73,13 @@ module Pod
             title = "Installing #{spec.name} #{spec.version}"
             if has_changed_version && has_changed_repo
               title += " (was #{previous_version} and source changed to `#{current_repo}` from `#{previous_spec_repo}`)"
-              end
+            end
             if has_changed_version && !has_changed_repo
               title += " (was #{previous_version})"
-              end
+            end
             if !has_changed_version && has_changed_repo
               title += " (source changed to `#{current_repo}` from `#{previous_spec_repo}`)"
-              end
+            end
           else
             title = "Installing #{spec}"
           end
