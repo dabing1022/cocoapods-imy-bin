@@ -53,16 +53,18 @@ Pod::HooksManager.register('cocoapods-imy-bin', :post_install) do |context|
 
   product_module_name_map = {}
 
-  context.pod_target_subprojects&.each do |project|
-    project.targets.each do |target|
-      next if target.respond_to?(:product_type) && (target.product_type == 'com.apple.product-type.bundle')
+  if context.respond_to?(:pod_target_subprojects)
+    context.pod_target_subprojects&.each do |project|
+      project.targets.each do |target|
+        next if target.respond_to?(:product_type) && (target.product_type == 'com.apple.product-type.bundle')
 
-      target.build_configurations&.each do |config|
-        process_build_config(target, config)
+        target.build_configurations&.each do |config|
+          process_build_config(target, config)
 
-        # 收集 product module name 映射
-        if config.name == 'Release'
-          product_module_name_map[target.product_name] = config.build_settings['PRODUCT_MODULE_NAME']
+          # 收集 product module name 映射
+          if config.name == 'Release'
+            product_module_name_map[target.product_name] = config.build_settings['PRODUCT_MODULE_NAME']
+          end
         end
       end
     end

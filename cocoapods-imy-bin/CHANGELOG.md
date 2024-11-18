@@ -1,3 +1,6 @@
+# 0.3.1.8-beta.4
+- fix: 修复 post_install_hook 中，context 不支持 pod_target_subprojects 的问题
+
 # 0.3.1.8-beta.3
 - feat: uncomment wxmsg send msg
 
