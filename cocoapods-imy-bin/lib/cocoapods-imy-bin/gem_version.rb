@@ -1,6 +1,6 @@
 
 module CBin
-  VERSION = '0.3.1.8-beta.2'.freeze
+  VERSION = '0.3.1.8-beta.3'.freeze
 end
 
 module Pod

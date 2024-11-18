@@ -115,11 +115,11 @@ module Pod
           # 统一发送消息
           unless success_messages.empty? && fail_messages.empty?
             msg = []
-            msg << "成功:" unless success_messages.empty?
+            msg << '成功:' unless success_messages.empty?
             msg.concat(success_messages)
-            msg << "\n失败:" unless fail_messages.empty? 
+            msg << "\n失败:" unless fail_messages.empty?
             msg.concat(fail_messages)
-            # CBin::WXMsg.send_wechat_group_msg(msg.join("\n"))
+            CBin::WXMsg.send_wechat_group_msg(msg.join("\n"))
           end
         end
 

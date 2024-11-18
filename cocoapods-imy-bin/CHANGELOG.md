@@ -1,3 +1,6 @@
+# 0.3.1.8-beta.3
+- feat: uncomment wxmsg send msg
+
 # 0.3.1.7
 - fix: 兼容 cocoapods-generate 2.2.5
 
