@@ -47,8 +47,8 @@ module CBin
         if spec_hash['vendored_frameworks'].nil?
           spec_hash['vendored_frameworks'] = "#{module_name}.xcframework"
         else
-          # If vendored_frameworks is a string, convert to array
-          existing_frameworks = spec_hash['vendored_frameworks'].is_a?(String) ? [spec_hash['vendored_frameworks']] : spec_hash['vendored_frameworks']
+          existing_frameworks = Array(spec_hash['vendored_frameworks']).map { |f| File.basename(f) }
+
           # Add new xcframework while preserving existing ones
           spec_hash['vendored_frameworks'] = existing_frameworks + ["#{module_name}.xcframework"]
         end
