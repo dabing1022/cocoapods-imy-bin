@@ -12,6 +12,8 @@ Pod::HooksManager.register('cocoapods-imy-bin', :post_install) do |context|
     xcconfig_content = File.read(xcconfig_path)
 
     binary_collector = Pod::Config.instance.podfile.binary_collector
+    Pod::UI.info "HooksManager Binary Collector #{binary_collector}"
+
     modified = false
     new_content = xcconfig_content.dup
 
@@ -29,7 +31,7 @@ Pod::HooksManager.register('cocoapods-imy-bin', :post_install) do |context|
 
       # Handle OTHER_SWIFT_FLAGS setting
       if !new_content.include?('OTHER_SWIFT_FLAGS')
-        new_content << "\nOTHER_SWIFT_FLAGS = -no-verify-emitted-module-interface" 
+        new_content << "\nOTHER_SWIFT_FLAGS = -no-verify-emitted-module-interface"
         modified = true
       elsif !new_content.include?('-no-verify-emitted-module-interface')
         new_content.gsub!(/OTHER_SWIFT_FLAGS\s*=(.*)$/, 'OTHER_SWIFT_FLAGS = \1 -no-verify-emitted-module-interface')
