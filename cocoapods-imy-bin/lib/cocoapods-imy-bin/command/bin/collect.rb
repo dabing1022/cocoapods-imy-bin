@@ -49,7 +49,7 @@ module Pod
         def run
           # @i_want_to_collect 为 true 时，表示开启二进制收集器
           unless @i_want_to_collect
-            Pod::UI.warn '未开启二进制收集器，如果需要，请使用 pod bin collect --i_want_to_collect 开启二进制收集器'
+            Pod::UI.puts '未开启二进制收集器，如果需要，请使用 pod bin collect --i_want_to_collect 开启二进制收集器'
             return
           end
 
@@ -61,17 +61,17 @@ module Pod
           # echo "BUILD_ROOT ${BUILD_ROOT}"
           @build_products_dir = ENV['XCODE_BUILT_PRODUCTS_DIR']
           if @build_products_dir.nil?
-            Pod::UI.warn '=================================================================================================='
-            Pod::UI.warn '未找到构建产物目录，请确认是否在环境变量中设置了 XCODE_BUILT_PRODUCTS_DIR (export XCODE_BUILT_PRODUCTS_DIR=xxx)'
-            Pod::UI.warn '=================================================================================================='
+            Pod::UI.puts '=================================================================================================='
+            Pod::UI.puts '未找到构建产物目录，请确认是否在环境变量中设置了 XCODE_BUILT_PRODUCTS_DIR (export XCODE_BUILT_PRODUCTS_DIR=xxx)'
+            Pod::UI.puts '=================================================================================================='
             return
           end
           # such as: iphoneos, iphonesimulator
           @build_configuration = Pathname.new(@build_products_dir).basename.to_s.split('-').last
           if @build_configuration.nil?
-            Pod::UI.warn '=================================================================================================='
-            Pod::UI.warn "#{@build_products_dir} 不是一个有效的构建产物目录"
-            Pod::UI.warn '=================================================================================================='
+            Pod::UI.puts '=================================================================================================='
+            Pod::UI.puts "#{@build_products_dir} 不是一个有效的构建产物目录"
+            Pod::UI.puts '=================================================================================================='
           end
 
           Pod::UI.notice "Xcode: build_products_dir: #{@build_products_dir}"
@@ -106,7 +106,7 @@ module Pod
                   success_messages << "#{spec.name} -> #{spec.version} 二进制组件制作完成！"
                 end
               rescue => e
-                Pod::UI.warn "Binary Collecting #{pod_name} failed: #{e.message}"
+                Pod::UI.puts "Binary Collecting #{pod_name} failed: #{e.message}"
                 fail_messages << "#{pod_name} 二进制组件制作失败: #{e.message}"
               end
             end
@@ -231,13 +231,19 @@ module Pod
           if lib_path.nil?
             pod_product_dir = pod_product_dir(pod_name)
             path = File.join(pod_product_dir, "lib#{pod_name}.a")
-            Pod::UI.warn "未找到 #{pod_name} 的构建产物 #{path}"
+            Pod::UI.puts "未找到 #{pod_name} 的构建产物 #{path}"
             return
           end
 
           pod_framework_path = pod_collection_framework_path(pod_name)
 
           product_name = pod_product_name(pod_name)
+
+          # Handle symlinks by getting real path
+          if File.symlink?(lib_path)
+            lib_path = File.realpath(lib_path)
+          end
+
           FileUtils.cp(lib_path, File.join(pod_framework_path, product_name))
 
           pod_framework_path
@@ -245,12 +251,12 @@ module Pod
 
         def copy_headers(pod_name)
           sandbox_path = Pod::Config.instance.sandbox.root
-          product_name = pod_product_name(pod_name)
-          pod_headers = File.join(sandbox_path.to_s, 'Headers', 'Public', product_name)
+          pod_headers = File.join(sandbox_path.to_s, 'Headers', 'Public', pod_name)
           framework_header_dir = pod_collection_framework_headers_dir pod_name
 
-          Dir.glob(File.join(pod_headers, '*')).each do |header|
+          Dir.glob(File.join(pod_headers, '**/*')).each do |header|
             next if File.basename(header).include?('.modulemap')
+            next if File.directory?(header)
 
             if File.symlink?(header)
               real_header = File.realpath(header)
@@ -275,7 +281,7 @@ module Pod
           pod_headers = File.join(sandbox_path.to_s, 'Headers', 'Public', pod_name)
           framework_modules_dir = pod_collection_framework_modules_dir pod_name
 
-          modulemap_files = Dir.glob(File.join(pod_headers, '*.modulemap'))
+          modulemap_files = Dir.glob(File.join(pod_headers, '**/*.modulemap'))
           product_name = pod_product_name(pod_name)
           if modulemap_files.empty?
             # Generate manual modulemap if none exists
@@ -310,14 +316,15 @@ module Pod
 
         def copy_umbrella_header(pod_name)
           sandbox_path = Pod::Config.instance.sandbox.root
-          pod_headers = File.join(sandbox_path.to_s, 'Headers', 'Public', pod_name)
+          module_name = pod_product_name(pod_name)
+          module_headers_dir = File.join(sandbox_path.to_s, 'Headers', 'Public', module_name)
+          normal_headers_dir = File.join(sandbox_path.to_s, 'Headers', 'Public', pod_name)
           framework_header_dir = pod_collection_framework_headers_dir pod_name
 
-          umbrella_header_files = Dir.glob(File.join(pod_headers, '*-umbrella.h'))
-          product_name = pod_product_name(pod_name)
+          umbrella_header_files = Dir.glob(File.join(module_headers_dir, '**/*-umbrella.h'))
           if umbrella_header_files.empty?
             # Generate manual umbrella header if none exists
-            import_header_statements = Dir.glob(File.join(pod_headers, '*.{h,hpp,hxx,hh}')).map { |header| "#import \"#{File.basename(header)}\"" }.join("\n")
+            import_header_statements = Dir.glob(File.join(normal_headers_dir, '**/*.{h,hpp,hxx,hh}')).map { |header| "#import \"#{File.basename(header)}\"" }.join("\n")
             # only support iphoneos
             umbrella_header_content = <<~UMBRELLA_HEADER
               #ifdef __OBJC__
@@ -336,8 +343,8 @@ module Pod
 
               #{import_header_statements}
 
-              FOUNDATION_EXPORT double #{product_name}VersionNumber;
-              FOUNDATION_EXPORT const unsigned char #{product_name}VersionString[];
+              FOUNDATION_EXPORT double #{module_name}VersionNumber;
+              FOUNDATION_EXPORT const unsigned char #{module_name}VersionString[];
             UMBRELLA_HEADER
             File.write("#{framework_header_dir}/#{pod_name}-umbrella.h", umbrella_header_content)
           else
@@ -358,6 +365,9 @@ module Pod
           return nil if resources_path.nil?
 
           framework_resources_dir = pod_collection_framework_resources_dir pod_name
+          if File.symlink?(resources_path)
+            resources_path = File.realpath(resources_path)
+          end
           FileUtils.cp_r(resources_path, framework_resources_dir)
         end
 
@@ -424,7 +434,7 @@ module Pod
           return nil unless Dir.exist?(pod_product_dir)
 
           Dir.chdir(pod_product_dir) do
-            resources_path = Dir.glob('*.bundle')
+            resources_path = Dir.glob('**/*.bundle')
             return nil if resources_path.empty?
 
             File.join(pod_product_dir, resources_path.first)
@@ -518,7 +528,7 @@ module Pod
         # curl http://ci.xxx:9192/frameworks -F "name=IMYFoundation" -F "version=7.7.4.2" -F "annotate=IMYFoundation_7.7.4.2_log" -F "file=@bin-zip/bin_IMYFoundation_7.7.4.2.zip"
         def upload_zip(pod_name, zip_file)
           unless File.exist?(zip_file)
-            Pod::UI.warn "未找到需要上传的文件: #{zip_file}"
+            Pod::UI.puts "未找到需要上传的文件: #{zip_file}"
             return
           end
 
